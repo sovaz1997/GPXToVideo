@@ -117,7 +117,7 @@ if __name__ == '__main__':
             
             for j in range(len(panoIdMap)):
                 if panoIdMap[j] != False:
-                    if not imagesCounter or imagePoints[len(imagePoints)-1].pano_id != panoIdMap[j]:
+                    if not imagesCounter or imagePoints[-1].pano_id != panoIdMap[j]:
                         img = ImagePoint(i + j, str(imagesCounter) + '.jpg', panoIdMap[j])
                         imagePoints.append(img)
                         print(img.point_id, img.file_name, img.pano_id)
