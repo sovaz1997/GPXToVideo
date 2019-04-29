@@ -103,21 +103,28 @@ if __name__ == '__main__':
     
     
     pointsDataFileName = 'points.dat'
+
     if not os.path.isfile(pointsDataFileName):
         print('File will be created')
         imagesCounter = 0
 
-        for i in range(len(coords)):
-            panoId = getPanoId(coords[i][0], coords[i][1])
+        
+        threads = 16
+        pool = mp.Pool(threads)
 
-            if panoId != False:
-                img = ImagePoint(i, str(imagesCounter) + '.jpg', panoId)
-                imagePoints.append(img)
-                print(img.point_id, img.file_name, img.pano_id)
-                imagesCounter += 1
+        for i in range(0, len(coords), threads):
+            panoIdMap = pool.starmap(getPanoId, [(coords[j][0], coords[j][1]) for j in range(i, min(i + threads, len(coords)))])
+            
+            for j in range(len(panoIdMap)):
+                if panoIdMap[j] != False:
+                    if not imagesCounter or imagePoints[len(imagePoints)-1].pano_id != panoIdMap[j]:
+                        img = ImagePoint(i + j, str(imagesCounter) + '.jpg', panoIdMap[j])
+                        imagePoints.append(img)
+                        print(img.point_id, img.file_name, img.pano_id)
+                        imagesCounter += 1
 
-            with open(pointsDataFileName, 'wb') as f:
-                pickle.dump(imagePoints, f)
+        with open(pointsDataFileName, 'wb') as f:
+            pickle.dump(imagePoints, f)
     else:
         print('File openned')
         with open(pointsDataFileName, 'rb') as f:
