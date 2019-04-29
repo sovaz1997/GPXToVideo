@@ -7,6 +7,8 @@ import numpy
 import gpx_parser as parser
 import multiprocessing as mp
 import time
+import pickle
+import os.path
 
 from PIL import Image
 from io import BytesIO
@@ -14,6 +16,12 @@ from io import BytesIO
 from lxml import etree
 
 prev = ''
+
+class ImagePoint:
+    def __init__(self, point_id, file_name, pano_id):
+        self.point_id = point_id
+        self.file_name = file_name
+        self.pano_id = pano_id
 
 def getPanoId(lat, lon):
     response = req.urlopen('https://cbk0.google.com/cbk?output=json&ll=' + str(lat) + ',' + str(lon))
@@ -26,13 +34,7 @@ def getPanoId(lat, lon):
         return False
 
 
-def getImage(lat, lon):
-    panoId = getPanoId(lat, lon)
-    if not panoId:
-        return False
-
-    print(panoId)
-
+def getImage(pano_id, file_name):
     tile_size = 512
 
     width = tile_size * 13
@@ -43,7 +45,7 @@ def getImage(lat, lon):
         for x in range(13):
             while 1:
                 try:
-                    response = requests.get('https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=ru&gl=ru&panoid=' + panoId + '&output=tile&x='\
+                    response = requests.get('https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=ru&gl=ru&panoid=' + pano_id + '&output=tile&x='\
                     + str(x) + '&y=' + str(y) + '&zoom=4&nbt&fover=2')
                     img = Image.open(BytesIO(response.content))
                     result_image.paste(im=img, box=(x * tile_size, y * tile_size))
@@ -55,7 +57,7 @@ def getImage(lat, lon):
                     time.sleep(10)
     
             
-    return result_image
+    return result_image, file_name
 
 def getCoords(gpx_filename):
     coord_list = []
@@ -73,14 +75,14 @@ def getCoords(gpx_filename):
 
     return coord_list
 
-def extendCoords(coords):
+def extendCoords(coords, distanseBetweenPoints):
     print(len(coords))
     
     newCoords = []
 
     for i in range(len(coords) - 1):
         dst = coords[i].distance_2d(coords[i + 1])
-        new_cnt = int(dst // 10)
+        new_cnt = int(dst // distanseBetweenPoints)
 
         lat = coords[i].latitude 
         lon = coords[i].longitude
@@ -96,22 +98,41 @@ def extendCoords(coords):
     return newCoords
 
 if __name__ == '__main__':
-    coords = getCoords('150Km.gpx')
-    coords = extendCoords(coords)
+    coords = extendCoords(getCoords('150Km.gpx'), 1000)
+    imagePoints = []
+    
+    
+    pointsDataFileName = 'points.dat'
+    if not os.path.isfile(pointsDataFileName):
+        imagesCounter = 0
 
-    count = 11696
+        for i in range(len(imagePoints)):
+            panoId = getPanoId(coords[i][0], coords[i][1])
 
-    parallel = 8
-    pool = mp.Pool(parallel)
+            if panoId != False:
+                img = ImagePoint(i, str(imagesCounter) + '.jpg', panoId)
+                imagePoints.append(img)
+                print(img.point_id, img.file_name, img.pano_id)
+                imagesCounter += 1
 
-    for i in range(12857, len(coords), parallel):
-        results = pool.starmap(getImage, [(coords[j][0], coords[j][1]) for j in range(i, i + parallel)])
-        print(i)
+            with open(pointsDataFileName, 'wb') as f:
+                pickle.dump(imagePoints, f)
+    else:
+        with open(pointsDataFileName, 'rb') as f:
+            imagePoints = pickle.load(f)
+
+    count = 0
+
+    threads = 8
+    pool = mp.Pool(threads)
+
+    print(imagePoints[0])
+
+    for i in range(0, len(imagePoints), threads):
+        results = pool.starmap(getImage, [(imagePoints[j].pano_id, imagePoints[j].file_name) for j in range(i, min(i + threads, len(imagePoints)))])
         print(results)
-        
+
         for j in results:
-            if j != False:
-                j.save('data\\' + str(count) + '.jpg')
-                count += 1
-                print("Count", count)
+            j[0].save(j[1])
+            print('Saved:', j[1])
     pool.close()
