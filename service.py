@@ -98,15 +98,16 @@ def extendCoords(coords, distanseBetweenPoints):
     return newCoords
 
 if __name__ == '__main__':
-    coords = extendCoords(getCoords('150Km.gpx'), 1000)
+    coords = extendCoords(getCoords('route.gpx'), 100)
     imagePoints = []
     
     
     pointsDataFileName = 'points.dat'
     if not os.path.isfile(pointsDataFileName):
+        print('File will be created')
         imagesCounter = 0
 
-        for i in range(len(imagePoints)):
+        for i in range(len(coords)):
             panoId = getPanoId(coords[i][0], coords[i][1])
 
             if panoId != False:
@@ -118,12 +119,13 @@ if __name__ == '__main__':
             with open(pointsDataFileName, 'wb') as f:
                 pickle.dump(imagePoints, f)
     else:
+        print('File openned')
         with open(pointsDataFileName, 'rb') as f:
             imagePoints = pickle.load(f)
 
     count = 0
 
-    threads = 8
+    threads = 7
     pool = mp.Pool(threads)
 
     print(imagePoints[0])
