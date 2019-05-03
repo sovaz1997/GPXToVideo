@@ -45,13 +45,20 @@ class ImageData:
         return self.panoId, self.image_height, self.image_width, self.tile_height, self.tile_width, self.pano_yaw_deg, self.point_id, self.file_name
 
 def getPanoId(lat, lon):
-    response = req.urlopen('https://cbk0.google.com/cbk?output=json&ll=' + str(lat) + ',' + str(lon))
-    html = response.read()
-
-    data = json.loads(html)
+   # response = req.urlopen(, timeout=10)
     
-    if 'Location' in data:
-        return ImageData(data)
+    while 1:
+        try:
+            html = requests.get('https://cbk0.google.com/cbk?output=json&ll=' + str(lat) + ',' + str(lon))
+            break
+        except requests.exceptions.ConnectionError:
+            print('Sleeping...')
+            time.sleep(5)
+    
+    html = html.json()
+
+    if 'Location' in html:
+        return ImageData(html)
     else:
         return False
 
@@ -183,7 +190,7 @@ if __name__ == '__main__':
         print('File will be created')
         imagesCounter = 0
 
-        threads = 16
+        threads = 7
         pool = mp.Pool(threads)
 
         prevPanoId = ''
@@ -216,7 +223,7 @@ if __name__ == '__main__':
 
     count = 0
 
-    threads = 7
+
     pool = mp.Pool(threads)
 
     for i in range(0, len(imageData), threads):
