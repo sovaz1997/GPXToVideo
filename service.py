@@ -1,7 +1,4 @@
-# Tiles (25x10): https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=ru&gl=ru&panoid=bZlPaVbI3qakBT2aBKmWFw&output=tile&x=25&y=12&zoom=5&nbt&fover=2
-
 import requests
-import urllib.request as req
 import json
 import numpy
 import gpx_parser as parser
@@ -44,18 +41,19 @@ class ImageData:
     def getTuple(self):
         return self.panoId, self.image_height, self.image_width, self.tile_height, self.tile_width, self.pano_yaw_deg, self.point_id, self.file_name
 
-def getPanoId(lat, lon):
-   # response = req.urlopen(, timeout=10)
-    
+def get(link):
+    html = False
     while 1:
         try:
-            html = requests.get('https://cbk0.google.com/cbk?output=json&ll=' + str(lat) + ',' + str(lon))
+            html = requests.get(link)
             break
         except requests.exceptions.ConnectionError:
             print('Sleeping...')
             time.sleep(5)
-    
-    html = html.json()
+    return html
+
+def getPanoId(lat, lon):
+    html = get('https://cbk0.google.com/cbk?output=json&ll=' + str(lat) + ',' + str(lon)).json()
 
     if 'Location' in html:
         return ImageData(html)
@@ -72,17 +70,12 @@ def getImage(panoId, image_height, image_width, tile_height, tile_width, pano_ya
 
     for y in range(7):
         for x in range(13):
-            while 1:
-                try:
-                    response = requests.get('https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=ru&gl=ru&panoid=' + panoId + '&output=tile&x='\
+            response = get('https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=ru&gl=ru&panoid=' + panoId + '&output=tile&x='\
                     + str(x) + '&y=' + str(y) + '&zoom=4&nbt&fover=2')
-                    img = Image.open(BytesIO(response.content))
-                    result_image.paste(im=img, box=(x * tile_size, y * tile_size))
-                    print('Downloaded: x = {}, y = {}'.format(x, y))
-                    break
-                except requests.exceptions.ConnectionError:
-                    print('Sleeping...')
-                    time.sleep(5)
+            img = Image.open(BytesIO(response.content))
+            result_image.paste(im=img, box=(x * tile_size, y * tile_size))
+            print('Downloaded: x = {}, y = {}'.format(x, y))
+
     
     shiftImage(result_image, direction - float(pano_yaw_deg))
     return result_image, file_name
@@ -128,9 +121,7 @@ def extendCoords(coords, distanseBetweenPoints):
 def shiftImage(image, angle):
     if angle < 0:
         angle = 360 - abs(angle)
-    
-    print('!', angle)
-    
+
     separator = round(image.size[0] * angle / 360)
 
     firstImage = image.crop((0, 0, separator, image.size[1]))
@@ -195,7 +186,7 @@ if __name__ == '__main__':
 
         prevPanoId = ''
 
-        for i in range(0, len(coords), threads):
+        for i in range(0, 300, threads):
             panoDataMap = pool.starmap(getPanoId, [(coords[j][0], coords[j][1]) for j in range(i, min(i + threads, len(coords)))])
             
             for j in range(len(panoDataMap)):
