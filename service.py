@@ -18,11 +18,10 @@ prev = ''
 class ImageData:
     def __init__(self, json_data):
         self.panoId = json_data['Location']['panoId']
-        self.image_height = json_data['Data']['image_height']
-        self.image_width = json_data['Data']['image_width']
-        self.tile_height = json_data['Data']['tile_height']
-        self.tile_width = json_data['Data']['tile_width']
         self.pano_yaw_deg = json_data['Projection']['pano_yaw_deg']
+        self.lat = float(json_data['Location']['lat'])
+        self.lon = float(json_data['Location']['lng'])
+
     
     def addExtraInfo(self, point_id, file_name):
         self.point_id = point_id
@@ -39,7 +38,7 @@ class ImageData:
         return res
     
     def getTuple(self):
-        return self.panoId, self.image_height, self.image_width, self.tile_height, self.tile_width, self.pano_yaw_deg, self.point_id, self.file_name
+        return self.panoId, self.pano_yaw_deg, self.lat, self.lon, self.point_id, self.file_name
 
 def get(link):
     html = False
@@ -61,7 +60,7 @@ def getPanoId(lat, lon):
         return False
 
 
-def getImage(panoId, image_height, image_width, tile_height, tile_width, pano_yaw_deg, point_id, file_name, direction):
+def getImage(panoId, pano_yaw_deg, point_id, lat, lon, file_name, direction):
     tile_size = 512
 
     width = tile_size * 13
@@ -186,7 +185,7 @@ if __name__ == '__main__':
 
         prevPanoId = ''
 
-        for i in range(0, len(coords), threads):
+        for i in range(0, 400, threads):
             panoDataMap = pool.starmap(getPanoId, [(coords[j][0], coords[j][1]) for j in range(i, min(i + threads, len(coords)))])
             
             for j in range(len(panoDataMap)):
@@ -207,13 +206,15 @@ if __name__ == '__main__':
         with open(pointsDataFileName, 'rb') as f:
             imageData = pickle.load(f)
     
-    for i in range(len(coords)-1):
-        directions.append(calculate_initial_compass_bearing(coords[i], coords[i + 1]))
+    for i in range(len(imageData)-1):
+        panoId1, pano_yaw_deg1, lat1, lon1, point_id1, file_name1 = imageData[i]
+        panoId2, pano_yaw_deg2, lat2, lon2, point_id2, file_name2 = imageData[i + 1]
+
+        directions.append(calculate_initial_compass_bearing((lat1, lon1), (lat2, lon2)))
     directions.append(directions[-1])
 
 
     count = 0
-
 
     pool = mp.Pool(threads)
 
