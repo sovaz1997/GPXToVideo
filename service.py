@@ -9,6 +9,7 @@ import multiprocessing as mp
 import time
 import pickle
 import os.path
+import math
 
 from PIL import Image
 from io import BytesIO
@@ -17,24 +18,52 @@ from lxml import etree
 
 prev = ''
 
-class ImagePoint:
-    def __init__(self, point_id, file_name, pano_id):
+class ImageData:
+    def __init__(self, json_data):
+        self.panoId = json_data['Location']['panoId']
+        self.image_height = json_data['Data']['image_height']
+        self.image_width = json_data['Data']['image_width']
+        self.tile_height = json_data['Data']['tile_height']
+        self.tile_width = json_data['Data']['tile_width']
+        self.pano_yaw_deg = json_data['Projection']['pano_yaw_deg']
+    
+    def addExtraInfo(self, point_id, file_name):
         self.point_id = point_id
         self.file_name = file_name
-        self.pano_id = pano_id
+    
+    def __str__(self):
+        res = 'Pano Id:' + self.panoId + '\n'
+        
+        if self.point_id != None:
+            res += 'Id:' + str(self.point_id) + '\n'
+        
+        if self.file_name != None:
+            res += 'File name:' + self.file_name + '\n'
+        return res
+    
+    def getTuple(self):
+        return self.panoId, self.image_height, self.image_width, self.tile_height, self.tile_width, self.pano_yaw_deg, self.point_id, self.file_name
+
+
+class ImagePoint:
+    def __init__(self, point_id, file_name, image_data):
+        self.point_id = point_id
+        self.file_name = file_name
+        self.image_data = image_data
 
 def getPanoId(lat, lon):
     response = req.urlopen('https://cbk0.google.com/cbk?output=json&ll=' + str(lat) + ',' + str(lon))
     html = response.read()
 
     data = json.loads(html)
+    print(json.dumps(data, sort_keys=True, indent=4))
     if 'Location' in data:
-        return data['Location']['panoId']
+        return ImageData(data)
     else:
         return False
 
 
-def getImage(pano_id, file_name):
+def getImage(panoId, image_height, image_width, tile_height, tile_width, pano_yaw_deg, point_id, file_name, direction):
     tile_size = 512
 
     width = tile_size * 13
@@ -45,18 +74,17 @@ def getImage(pano_id, file_name):
         for x in range(13):
             while 1:
                 try:
-                    response = requests.get('https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=ru&gl=ru&panoid=' + pano_id + '&output=tile&x='\
+                    response = requests.get('https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=ru&gl=ru&panoid=' + panoId + '&output=tile&x='\
                     + str(x) + '&y=' + str(y) + '&zoom=4&nbt&fover=2')
                     img = Image.open(BytesIO(response.content))
                     result_image.paste(im=img, box=(x * tile_size, y * tile_size))
                     print('Downloaded: x = {}, y = {}'.format(x, y))
                     break
                 except requests.exceptions.ConnectionError:
-                    #r.status_code = "Connection refused"
                     print('Sleeping...')
-                    time.sleep(10)
+                    time.sleep(5)
     
-            
+    shiftImage(result_image, direction - float(pano_yaw_deg))
     return result_image, file_name
 
 def getCoords(gpx_filename):
@@ -97,48 +125,110 @@ def extendCoords(coords, distanseBetweenPoints):
     
     return newCoords
 
+def shiftImage(image, angle):
+    if angle < 0:
+        angle = 360 - abs(angle)
+    
+    print('!', angle)
+    
+    separator = round(image.size[0] * angle / 360)
+
+    firstImage = image.crop((0, 0, separator, image.size[1]))
+    secondImage = image.crop((separator, 0, image.size[0], image.size[1]))
+
+    image.paste(secondImage, box=(0, 0))
+    image.paste(firstImage, box=(secondImage.size[0], 0))
+
+def calculate_initial_compass_bearing(pointA, pointB):
+    """
+    Calculates the bearing between two points.
+    The formulae used is the following:
+        θ = atan2(sin(Δlong).cos(lat2),
+                  cos(lat1).sin(lat2) − sin(lat1).cos(lat2).cos(Δlong))
+    :Parameters:
+      - `pointA: The tuple representing the latitude/longitude for the
+        first point. Latitude and longitude must be in decimal degrees
+      - `pointB: The tuple representing the latitude/longitude for the
+        second point. Latitude and longitude must be in decimal degrees
+    :Returns:
+      The bearing in degrees
+    :Returns Type:
+      float
+    """
+    if (type(pointA) != tuple) or (type(pointB) != tuple):
+        raise TypeError("Only tuples are supported as arguments")
+
+    lat1 = math.radians(pointA[0])
+    lat2 = math.radians(pointB[0])
+
+    diffLong = math.radians(pointB[1] - pointA[1])
+
+    x = math.sin(diffLong) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - (math.sin(lat1)
+            * math.cos(lat2) * math.cos(diffLong))
+
+    initial_bearing = math.atan2(x, y)
+
+    # Now we have the initial bearing but math.atan2 return values
+    # from -180° to + 180° which is not what we want for a compass bearing
+    # The solution is to normalize the initial bearing as shown below
+    initial_bearing = math.degrees(initial_bearing)
+    compass_bearing = (initial_bearing + 360) % 360
+
+    return compass_bearing
+
+
 if __name__ == '__main__':
     coords = extendCoords(getCoords('route.gpx'), 100)
-    imagePoints = []
+    imageData = []
     
     
     pointsDataFileName = 'points.dat'
-
+    directions = []
+    
     if not os.path.isfile(pointsDataFileName):
         print('File will be created')
         imagesCounter = 0
 
         
-        threads = 16
+        threads = 4
         pool = mp.Pool(threads)
 
+        prevPanoId = ''
+
         for i in range(0, len(coords), threads):
-            panoIdMap = pool.starmap(getPanoId, [(coords[j][0], coords[j][1]) for j in range(i, min(i + threads, len(coords)))])
+            panoDataMap = pool.starmap(getPanoId, [(coords[j][0], coords[j][1]) for j in range(i, min(i + threads, len(coords)))])
             
-            for j in range(len(panoIdMap)):
-                if panoIdMap[j] != False:
-                    if not imagesCounter or imagePoints[-1].pano_id != panoIdMap[j]:
-                        img = ImagePoint(i + j, str(imagesCounter) + '.jpg', panoIdMap[j])
-                        imagePoints.append(img)
-                        print(img.point_id, img.file_name, img.pano_id)
+            for j in range(len(panoDataMap)):
+                if panoDataMap[j] != False:
+                    if not imagesCounter or prevPanoId != panoDataMap[j].panoId:
+                        prevPanoId = panoDataMap[j].panoId
+                        img = panoDataMap[j]
+                        img.addExtraInfo(i + j, str(imagesCounter) + '.jpg')
+                        imageData.append(img.getTuple())
+
+                        print(imageData[-1])
                         imagesCounter += 1
 
         with open(pointsDataFileName, 'wb') as f:
-            pickle.dump(imagePoints, f)
+            pickle.dump(imageData, f)
     else:
         print('File openned')
         with open(pointsDataFileName, 'rb') as f:
-            imagePoints = pickle.load(f)
+            imageData = pickle.load(f)
+    
+    for i in range(len(coords)-1):
+        directions.append(calculate_initial_compass_bearing(coords[i], coords[i + 1]))
+    directions.append(directions[-1])
+
 
     count = 0
 
-    threads = 7
+    threads = 4
     pool = mp.Pool(threads)
 
-    print(imagePoints[0])
-
-    for i in range(0, len(imagePoints), threads):
-        results = pool.starmap(getImage, [(imagePoints[j].pano_id, imagePoints[j].file_name) for j in range(i, min(i + threads, len(imagePoints)))])
+    for i in range(0, len(imageData), threads):
+        results = pool.starmap(getImage, [(imageData[j] + (directions[j],)) for j in range(i, min(i + threads, len(imageData)))])
         print(results)
 
         for j in results:
