@@ -175,12 +175,13 @@ if __name__ == '__main__':
     
     pointsDataFileName = 'points.dat'
     directions = []
+
+    threads = 7
     
     if not os.path.isfile(pointsDataFileName):
         print('File will be created')
         imagesCounter = 0
 
-        threads = 7
         pool = mp.Pool(threads)
 
         prevPanoId = ''
