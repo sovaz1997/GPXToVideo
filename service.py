@@ -169,14 +169,14 @@ def calculate_initial_compass_bearing(pointA, pointB):
 
 
 if __name__ == '__main__':
-    coords = extendCoords(getCoords('150Km.gpx'), 5)
+    coords = extendCoords(getCoords('route.gpx'), 100)
     imageData = []
     
     
     pointsDataFileName = 'points.dat'
     directions = []
 
-    threads = 7
+    threads = 32
     
     if not os.path.isfile(pointsDataFileName):
         print('File will be created')
@@ -186,7 +186,7 @@ if __name__ == '__main__':
 
         prevPanoId = ''
 
-        for i in range(0, 400, threads):
+        for i in range(0, len(coords), threads):
             panoDataMap = pool.starmap(getPanoId, [(coords[j][0], coords[j][1]) for j in range(i, min(i + threads, len(coords)))])
             
             for j in range(len(panoDataMap)):
@@ -217,6 +217,7 @@ if __name__ == '__main__':
 
     count = 0
 
+    threads = 16
     pool = mp.Pool(threads)
 
     for i in range(0, len(imageData), threads):
