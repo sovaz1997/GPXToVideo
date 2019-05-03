@@ -186,7 +186,7 @@ if __name__ == '__main__':
 
         prevPanoId = ''
 
-        for i in range(0, 300, threads):
+        for i in range(0, len(coords), threads):
             panoDataMap = pool.starmap(getPanoId, [(coords[j][0], coords[j][1]) for j in range(i, min(i + threads, len(coords)))])
             
             for j in range(len(panoDataMap)):
