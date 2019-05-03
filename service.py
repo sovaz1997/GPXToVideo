@@ -44,19 +44,12 @@ class ImageData:
     def getTuple(self):
         return self.panoId, self.image_height, self.image_width, self.tile_height, self.tile_width, self.pano_yaw_deg, self.point_id, self.file_name
 
-
-class ImagePoint:
-    def __init__(self, point_id, file_name, image_data):
-        self.point_id = point_id
-        self.file_name = file_name
-        self.image_data = image_data
-
 def getPanoId(lat, lon):
     response = req.urlopen('https://cbk0.google.com/cbk?output=json&ll=' + str(lat) + ',' + str(lon))
     html = response.read()
 
     data = json.loads(html)
-    print(json.dumps(data, sort_keys=True, indent=4))
+    
     if 'Location' in data:
         return ImageData(data)
     else:
@@ -179,7 +172,7 @@ def calculate_initial_compass_bearing(pointA, pointB):
 
 
 if __name__ == '__main__':
-    coords = extendCoords(getCoords('route.gpx'), 100)
+    coords = extendCoords(getCoords('150Km.gpx'), 5)
     imageData = []
     
     
@@ -190,8 +183,7 @@ if __name__ == '__main__':
         print('File will be created')
         imagesCounter = 0
 
-        
-        threads = 4
+        threads = 16
         pool = mp.Pool(threads)
 
         prevPanoId = ''
@@ -224,7 +216,7 @@ if __name__ == '__main__':
 
     count = 0
 
-    threads = 4
+    threads = 7
     pool = mp.Pool(threads)
 
     for i in range(0, len(imageData), threads):
