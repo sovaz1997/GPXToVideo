@@ -199,11 +199,12 @@ if __name__ == '__main__':
 
                         print(imageData[-1])
                         imagesCounter += 1
+        pool.close()
 
         with open(pointsDataFileName, 'wb') as f:
             pickle.dump(imageData, f)
     else:
-        print('File openned')
+        print('File opened')
         with open(pointsDataFileName, 'rb') as f:
             imageData = pickle.load(f)
     
@@ -217,7 +218,8 @@ if __name__ == '__main__':
 
     count = 0
 
-    threads = 16
+    threads = 8
+    
     pool = mp.Pool(threads)
 
     for i in range(0, len(imageData), threads):
