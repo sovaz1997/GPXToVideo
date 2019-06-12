@@ -169,7 +169,7 @@ def calculate_initial_compass_bearing(pointA, pointB):
 
 
 if __name__ == '__main__':
-    coords = extendCoords(getCoords('route.gpx'), 100)
+    coords = extendCoords(getCoords('route.gpx'), 5)
     imageData = []
     
     
